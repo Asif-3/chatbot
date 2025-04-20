@@ -16,7 +16,7 @@ if 'past_inputs' not in st.session_state:
     st.session_state.past_inputs = []
 
 # App UI
-st.title("💬 Chat with Hugging Face Bot")
+st.title("💬 Chat with Asif chat Bot")
 st.write("Start chatting below:")
 
 # User input
