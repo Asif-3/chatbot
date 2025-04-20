@@ -2,52 +2,52 @@ import streamlit as st
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-# Load LLM (you can swap the model below with others from Hugging Face)
-@st.cache_resource
-def load_model():
-    model_name = "tiiuae/falcon-rw-1b"  # small and runs on CPU/GPU
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-    return tokenizer, model
+# Use a smaller, more reliable model
+model_name = "microsoft/DialoGPT-small"
 
-tokenizer, model = load_model()
+# Load tokenizer and model
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
 
-st.title("🧠 Open Source ChatGPT")
-st.caption("Chatbot using local LLM via Hugging Face Transformers (No API needed)")
+# Initialize chat state
+if 'chat_history_ids' not in st.session_state:
+    st.session_state.chat_history_ids = None
+if 'past_inputs' not in st.session_state:
+    st.session_state.past_inputs = []
 
-# Session state for messages
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# App UI
+st.title("💬 Chat with Hugging Face Bot")
+st.write("Start chatting below:")
 
-# Display chat history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# User input
+user_input = st.text_input("You:", key="input")
 
-# Generate model response
-def generate_response(prompt):
-    inputs = tokenizer(prompt, return_tensors="pt")
-    outputs = model.generate(
-        **inputs,
-        max_length=200,
+if user_input:
+    # Add user input to chat history
+    st.session_state.past_inputs.append(user_input)
+
+    # Tokenize user input and append to chat history
+    new_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors='pt')
+    bot_input_ids = torch.cat([st.session_state.chat_history_ids, new_input_ids], dim=-1) if st.session_state.chat_history_ids is not None else new_input_ids
+
+    # Generate bot response
+    st.session_state.chat_history_ids = model.generate(
+        bot_input_ids,
+        max_length=1000,
+        pad_token_id=tokenizer.eos_token_id,
         do_sample=True,
-        temperature=0.7,
-        top_p=0.9,
-        pad_token_id=tokenizer.eos_token_id
+        top_k=50,
+        top_p=0.95
     )
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return response[len(prompt):].strip()
 
-# Chat input
-if user_input := st.chat_input("Ask me anything..."):
-    # Save user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    # Decode and display response
+    response = tokenizer.decode(
+        st.session_state.chat_history_ids[:, bot_input_ids.shape[-1]:][0],
+        skip_special_tokens=True
+    )
 
-    # Get and display model response
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = generate_response(user_input)
-            st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+    # Display conversation
+    for i, msg in enumerate(st.session_state.past_inputs):
+        st.markdown(f"**You:** {msg}")
+        if i == len(st.session_state.past_inputs) - 1:
+            st.markdown(f"**Bot:** {response}")
